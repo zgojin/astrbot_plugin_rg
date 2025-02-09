@@ -4,7 +4,7 @@ import random
 
 
 # 注册左轮手枪装填射击游戏插件
-@register("revolver_game", "长安某", "左轮手枪装填射击游戏插件", "1.0.0")
+@register("revolver_game", "长安某", "俄罗斯轮盘赌", "1.0.0")
 class RevolverGamePlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)

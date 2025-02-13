@@ -7,6 +7,7 @@ import yaml
 import random
 import os
 
+
 # 插件目录
 PLUGIN_DIR = os.path.join('data', 'plugins', 'astrbot_plugin_RG')
 # 确保插件目录存在
@@ -14,7 +15,7 @@ if not os.path.exists(PLUGIN_DIR):
     os.makedirs(PLUGIN_DIR)
 
 # 配置路径
-TEXTS_FILE = os.path.join(PLUGIN_DIR, 'revolver_game_texts.yml')
+TEXTS_FILE = os.path.join(PLUGIN_DIR,'revolver_game_texts.yml')
 
 
 @register("revolver_game", "长安某", "手枪", "1.1.0")
@@ -67,13 +68,18 @@ class RevolverGamePlugin(Star):
     async def on_all_messages(self, event: AstrMessageEvent):
         """处理所有消息"""
         group_id = self._get_group_id(event)
-        if not group_id:
-            yield event.plain_result("该游戏仅限群聊中使用，请在群内游玩。")
-            yield event
-            return
+        is_private = not group_id  # 判断是否为私聊
+        message_str = event.message_str.strip()
+        if is_private:
+            valid_commands = ["走火开", "走火关", "装填", "射爆"]
+            if not any(message_str.startswith(cmd) for cmd in valid_commands):
+                return
+            else:
+                yield event.plain_result("该游戏仅限群聊中使用，请在群内游玩。")
+                yield event
+                return
 
         self._init_group_misfire_switch(group_id)
-        message_str = event.message_str.strip()
 
         if message_str == "走火开":
             result = await self._handle_misfire_switch_on(event, group_id)

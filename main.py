@@ -6,7 +6,7 @@ import datetime
 import yaml
 import random
 import os
-
+import logging
 
 # 插件目录
 PLUGIN_DIR = os.path.join('data', 'plugins', 'astrbot_plugin_RG')
@@ -15,16 +15,14 @@ if not os.path.exists(PLUGIN_DIR):
     os.makedirs(PLUGIN_DIR)
 
 # 配置路径
-TEXTS_FILE = os.path.join(PLUGIN_DIR,'revolver_game_texts.yml')
-
+TEXTS_FILE = os.path.join(PLUGIN_DIR, 'revolver_game_texts.yml')
 
 @register("revolver_game", "长安某", "手枪", "1.1.0")
 class RevolverGamePlugin(Star):
-    def __init__(self, context: Context, config: dict = None):
+    def __init__(self, context: Context):
         super().__init__(context)
-        if config is None:
-            config = {}
-        self.config = config
+        # 从 context 中获取配置
+        self.config = context.get_config()
         # 群游戏状态
         self.group_states = {}
         # 加载走火开关
@@ -36,21 +34,27 @@ class RevolverGamePlugin(Star):
         # 加载游戏文本
         self.texts = self._load_texts()
         # 初始化定时器调度器
-        self.scheduler = AsyncIOScheduler()
-        self.scheduler.start()
+        if not hasattr(context, 'scheduler'):
+            context.scheduler = AsyncIOScheduler()
+            context.scheduler.start()
+        self.scheduler = context.scheduler
         # 群消息来源映射
         self.group_umo_mapping = {}
 
     def _load_texts(self):
         """加载游戏文本，多编码尝试"""
-        encodings = ['utf-8', 'gbk', 'gb2312']
-        for encoding in encodings:
-            try:
-                with open(TEXTS_FILE, 'r', encoding=encoding) as file:
-                    return yaml.safe_load(file)
-            except UnicodeDecodeError:
-                continue
-        return {}
+        if not hasattr(self, '_cached_texts'):
+            encodings = ['utf-8', 'gbk', 'gb2312']
+            for encoding in encodings:
+                try:
+                    with open(TEXTS_FILE, 'r', encoding=encoding) as file:
+                        self._cached_texts = yaml.safe_load(file)
+                        break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                self._cached_texts = {}
+        return self._cached_texts
 
     def _load_misfire_switches(self):
         """从配置文件加载走火开关信息"""
@@ -60,7 +64,9 @@ class RevolverGamePlugin(Star):
     def _save_misfire_switches(self):
         """保存走火开关信息到配置文件"""
         texts = self._load_texts()
-        texts['misfire_switches'] = self.group_misfire_switches
+        if 'misfire_switches' not in texts:
+            texts['misfire_switches'] = {}
+        texts['misfire_switches'].update(self.group_misfire_switches)
         with open(TEXTS_FILE, 'w', encoding='utf-8') as file:
             yaml.dump(texts, file, allow_unicode=True)
 
@@ -70,14 +76,13 @@ class RevolverGamePlugin(Star):
         group_id = self._get_group_id(event)
         is_private = not group_id  # 判断是否为私聊
         message_str = event.message_str.strip()
+        
         if is_private:
             valid_commands = ["走火开", "走火关", "装填", "射爆"]
-            if not any(message_str.startswith(cmd) for cmd in valid_commands):
-                return
-            else:
+            if any(message_str.startswith(cmd) for cmd in valid_commands):
                 yield event.plain_result("该游戏仅限群聊中使用，请在群内游玩。")
-                yield event
-                return
+            # 直接返回，不对私聊消息进行任何其他处理
+            return
 
         self._init_group_misfire_switch(group_id)
 
@@ -104,8 +109,6 @@ class RevolverGamePlugin(Star):
         elif message_str == "射爆":
             async for result in self.shoot(event):
                 yield result
-
-        yield event
 
     def _get_group_id(self, event: AstrMessageEvent):
         """获取群id"""
@@ -138,8 +141,8 @@ class RevolverGamePlugin(Star):
         message = f"{misfire_desc} {user_reaction} 不幸被击中！"
         try:
             yield event.plain_result(message)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Failed to handle misfire: {e}")
         await self._ban_user(event, client, int(event.get_sender_id()))
 
     def _parse_bullet_count(self, message_str):
@@ -224,8 +227,8 @@ class RevolverGamePlugin(Star):
         message = f"{trigger_desc}，{user_reaction}"
         try:
             yield event.plain_result(message)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Failed to handle real shot: {e}")
         await self._ban_user(event, client, int(event.get_sender_id()))
 
     async def _handle_empty_shot(self, event: AstrMessageEvent, group_state, chambers, current_index, sender_nickname):
@@ -234,8 +237,8 @@ class RevolverGamePlugin(Star):
         miss_message = random.choice(self.texts.get('miss_messages', [])).format(sender_nickname=sender_nickname)
         try:
             yield event.plain_result(miss_message)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Failed to handle empty shot: {e}")
 
     def start_timer(self, event: AstrMessageEvent, group_id, seconds):
         """启动群定时器"""
@@ -266,12 +269,12 @@ class RevolverGamePlugin(Star):
                 duration=60,
                 self_id=int(event.get_self_id())
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Failed to ban user: {e}")
 
     def _remove_timer_job(self, job_id):
         """移除定时器任务"""
         try:
             self.scheduler.remove_job(job_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Failed to remove timer job: {e}")

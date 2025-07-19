@@ -1,6 +1,6 @@
 import asyncio
 from astrbot.api.all import *
-from astrbot.api.event import MessageChain
+from astrbot.api.event import MessageChain, filter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import datetime
 import yaml
@@ -70,20 +70,12 @@ class RevolverGamePlugin(Star):
         with open(TEXTS_FILE, 'w', encoding='utf-8') as file:
             yaml.dump(texts, file, allow_unicode=True)
 
-    @event_message_type(EventMessageType.ALL)
-    async def on_all_messages(self, event: AstrMessageEvent):
-        """处理所有消息"""
-        group_id = self._get_group_id(event)
-        is_private = not group_id  # 判断是否为私聊
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    async def on_group_message(self, event: AstrMessageEvent):
+        """处理群消息"""
+        group_id = event.message_obj.group_id
         message_str = event.message_str.strip()
         
-        if is_private:
-            valid_commands = ["走火开", "走火关", "装填", "射爆"]
-            if any(message_str.startswith(cmd) for cmd in valid_commands):
-                yield event.plain_result("该游戏仅限群聊中使用，请在群内游玩。")
-            # 直接返回，不对私聊消息进行任何其他处理
-            return
-
         self._init_group_misfire_switch(group_id)
 
         if message_str == "走火开":
@@ -109,6 +101,14 @@ class RevolverGamePlugin(Star):
         elif message_str == "射爆":
             async for result in self.shoot(event):
                 yield result
+
+    @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
+    async def on_private_message(self, event: AstrMessageEvent):
+        """处理私聊消息"""
+        message_str = event.message_str.strip()
+        valid_commands = ["走火开", "走火关", "装填", "射爆"]
+        if any(message_str.startswith(cmd) for cmd in valid_commands):
+            yield event.plain_result("该游戏仅限群聊中使用，请在群内游玩。")
 
     def _get_group_id(self, event: AstrMessageEvent):
         """获取群id"""

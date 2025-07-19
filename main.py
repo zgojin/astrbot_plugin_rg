@@ -9,7 +9,7 @@ import os
 import logging
 
 # 插件目录
-PLUGIN_DIR = os.path.join('data', 'plugins', 'astrbot_plugin_RG')
+PLUGIN_DIR = os.path.join('data', 'plugins', 'astrbot_plugin_rg')
 # 确保插件目录存在
 if not os.path.exists(PLUGIN_DIR):
     os.makedirs(PLUGIN_DIR)

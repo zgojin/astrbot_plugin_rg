@@ -17,7 +17,7 @@ if not os.path.exists(PLUGIN_DIR):
 # 配置路径
 TEXTS_FILE = os.path.join(PLUGIN_DIR, 'revolver_game_texts.yml')
 
-@register("revolver_game", "长安某", "手枪", "1.3.1")
+@register("revolver_game", "长安某", "手枪", "1.3.2")
 class RevolverGamePlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
